@@ -6,9 +6,9 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf_token($_POST['csrf_token'] ?? '');
     
-    update_option('bunny_api_key', $_POST['api_key']);
-    update_option('bunny_storage_zone', $_POST['storage_zone']);
-    update_option('bunny_pull_zone', $_POST['pull_zone']);
+    update_option('bunny_api_key', trim($_POST['api_key']));
+    update_option('bunny_storage_zone', trim($_POST['storage_zone']));
+    update_option('bunny_pull_zone', rtrim(trim($_POST['pull_zone']), '/'));
     update_option('bunny_region', $_POST['region']); // de, ny, sg, la
     update_option('bunny_keep_local', isset($_POST['keep_local']) ? 1 : 0);
     
@@ -23,7 +23,7 @@ $keepLocal = get_option('bunny_keep_local', 0);
 ?>
 
 <div class="mb-6">
-    <h2 class="text-xl font-bold mb-4">Configuración de Bunny CDN</h2>
+    <h2 class="text-xl font-bold mb-4">Configuración de Bunny CDN (bunny.net)</h2>
     
     <?php if ($message): ?>
         <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
@@ -35,13 +35,14 @@ $keepLocal = get_option('bunny_keep_local', 0);
         <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
         
         <div>
-            <label class="block text-gray-700 font-bold mb-2">API Key (Storage)</label>
-            <input type="password" name="api_key" value="<?php echo htmlspecialchars($apiKey); ?>" class="w-full border rounded px-3 py-2">
+            <label class="block text-gray-700 font-bold mb-2">API Key (Storage Password)</label>
+            <input type="password" name="api_key" value="<?php echo htmlspecialchars($apiKey); ?>" class="w-full border rounded px-3 py-2" placeholder="Ej: 5f9e8d7c-6b5a-4...">
         </div>
         
         <div>
-            <label class="block text-gray-700 font-bold mb-2">Storage Zone Name</label>
-            <input type="text" name="storage_zone" value="<?php echo htmlspecialchars($storageZone); ?>" class="w-full border rounded px-3 py-2">
+            <label class="block text-gray-700 font-bold mb-2">Storage Zone Name (Nombre de la Zona)</label>
+            <input type="text" name="storage_zone" value="<?php echo htmlspecialchars($storageZone); ?>" class="w-full border rounded px-3 py-2" placeholder="Ej: mi-zona-storage">
+            <p class="text-sm text-gray-500">Solo el nombre, no la URL completa.</p>
         </div>
         
         <div>

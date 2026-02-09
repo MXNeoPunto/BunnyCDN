@@ -34,11 +34,13 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
             imagepalettetotruecolor($image);
             imagealphablending($image, true);
             imagesavealpha($image, true);
-            imagewebp($image, $newPath, 80);
+            $success = imagewebp($image, $newPath, 80);
             imagedestroy($image);
             
-            $localPath = $newPath;
-            $fileName = $newFileName;
+            if ($success && file_exists($newPath) && filesize($newPath) > 0) {
+                $localPath = $newPath;
+                $fileName = $newFileName;
+            }
         }
     }
 
@@ -51,10 +53,20 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
 
     $url = "https://{$host}/{$storageZone}/{$fileName}";
     
+    if (!file_exists($localPath)) {
+        error_log("Bunny CDN Error: File not found: $localPath");
+        throw new Exception("Error: File not found at $localPath");
+    }
+
     $fileStream = fopen($localPath, 'r');
+    if (!$fileStream) {
+        error_log("Bunny CDN Error: Could not open file: $localPath");
+        throw new Exception("Error: Could not open file for reading.");
+    }
+
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_PUT, 1);
+    curl_setopt($ch, CURLOPT_UPLOAD, 1);
     curl_setopt($ch, CURLOPT_INFILE, $fileStream);
     curl_setopt($ch, CURLOPT_INFILESIZE, filesize($localPath));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
@@ -65,6 +77,15 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    if (curl_errno($ch)) {
+        $error = curl_error($ch);
+        curl_close($ch);
+        fclose($fileStream);
+        error_log("Bunny CDN cURL Error: " . $error);
+        throw new Exception("Error connecting to Bunny CDN: " . $error);
+    }
+
     curl_close($ch);
     fclose($fileStream);
     
@@ -85,6 +106,9 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
         if (!$keepLocal) {
             @unlink($originalPath);
         }
+    } else {
+        error_log("Bunny CDN Upload Failed: HTTP $httpCode - Response: $response");
+        throw new Exception("Error uploading to Bunny CDN. HTTP Code: $httpCode");
     }
 }
 
