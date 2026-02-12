@@ -7,7 +7,8 @@ add_action('media_delete', 'r2_delete_handler', 10, 1);
 add_filter('admin_menu_items', 'r2_add_menu');
 
 function r2_add_menu($items) {
-    $items[] = ['label' => 'Cloudflare R2', 'url' => '/admin/plugin-page.php?plugin=cloudflare-r2', 'icon' => 'cloud'];
+    $slug = basename(__DIR__);
+    $items[] = ['label' => 'Cloudflare R2', 'url' => '/admin/plugin-page.php?plugin=' . $slug, 'icon' => 'cloud'];
     return $items;
 }
 
