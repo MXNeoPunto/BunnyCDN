@@ -1,27 +1,33 @@
 <?php
 
-add_action('media_upload', 'bunny_cdn_upload_handler', 10, 2);
-add_action('media_delete', 'bunny_cdn_delete_handler', 10, 1);
-add_filter('admin_menu_items', 'bunny_cdn_add_menu');
+require_once __DIR__ . '/S3Client.php';
 
-function bunny_cdn_add_menu($items) {
-    $items[] = ['label' => 'Bunny CDN', 'url' => '/admin/plugin-page.php?plugin=bunny-cdn', 'icon' => 'cloud'];
+add_action('media_upload', 'r2_upload_handler', 10, 2);
+add_action('media_delete', 'r2_delete_handler', 10, 1);
+add_filter('admin_menu_items', 'r2_add_menu');
+
+function r2_add_menu($items) {
+    $slug = basename(__DIR__);
+    $items[] = ['label' => 'Cloudflare R2', 'url' => '/admin/plugin-page.php?plugin=' . $slug, 'icon' => 'cloud'];
     return $items;
 }
 
-function bunny_cdn_upload_handler($mediaId, $localPath) {
-    $apiKey = get_option('bunny_api_key');
-    $storageZone = get_option('bunny_storage_zone');
-    $pullZone = get_option('bunny_pull_zone');
-    $region = get_option('bunny_region', 'de');
+function r2_upload_handler($mediaId, $localPath) {
+    $endpoint = get_option('r2_endpoint');
+    $accessKey = get_option('r2_access_key');
+    $secretKey = get_option('r2_secret_key');
+    $bucketName = get_option('r2_bucket_name');
+    $customDomain = get_option('r2_custom_domain');
     
-    if (!$apiKey || !$storageZone) return;
+    if (!$endpoint || !$accessKey || !$secretKey || !$bucketName) return;
 
     $fileName = basename($localPath);
     $originalPath = $localPath;
     
     // WebP Conversion
     $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+    $mimeType = mime_content_type($localPath);
+
     if (defined('WEBP_CONVERTER_ACTIVE') && in_array($ext, ['jpg', 'jpeg', 'png']) && function_exists('imagewebp')) {
         $image = null;
         if ($ext == 'jpeg' || $ext == 'jpg') $image = @imagecreatefromjpeg($localPath);
@@ -39,42 +45,19 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
             
             $localPath = $newPath;
             $fileName = $newFileName;
+            $mimeType = 'image/webp';
         }
     }
 
-    // Determine Host
-    $host = 'storage.bunnycdn.com';
-    if ($region == 'ny') $host = 'ny.storage.bunnycdn.com';
-    else if ($region == 'la') $host = 'la.storage.bunnycdn.com';
-    else if ($region == 'sg') $host = 'sg.storage.bunnycdn.com';
-    else if ($region == 'sy') $host = 'syd.storage.bunnycdn.com';
-
-    $url = "https://{$host}/{$storageZone}/{$fileName}";
+    $s3 = new S3Client($endpoint, $accessKey, $secretKey, $bucketName);
     
-    $fileStream = fopen($localPath, 'r');
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_PUT, 1);
-    curl_setopt($ch, CURLOPT_INFILE, $fileStream);
-    curl_setopt($ch, CURLOPT_INFILESIZE, filesize($localPath));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "AccessKey: {$apiKey}",
-        "Content-Type: application/octet-stream"
-    ]);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    fclose($fileStream);
-    
-    if ($httpCode == 201) {
+    if ($s3->putObject($fileName, $localPath, $mimeType)) {
         global $pdo;
-        $cdnUrl = rtrim($pullZone, '/') . '/' . $fileName;
+        $cdnUrl = rtrim($customDomain, '/') . '/' . $fileName;
         $stmt = $pdo->prepare("UPDATE media SET cdn_url = ?, file_name = ? WHERE id = ?");
         $stmt->execute([$cdnUrl, $fileName, $mediaId]);
         
-        $keepLocal = get_option('bunny_keep_local', 0);
+        $keepLocal = get_option('r2_keep_local', 0);
 
         // Remove local WebP if created
         if ($localPath !== $originalPath) {
@@ -88,35 +71,21 @@ function bunny_cdn_upload_handler($mediaId, $localPath) {
     }
 }
 
-function bunny_cdn_delete_handler($mediaId) {
+function r2_delete_handler($mediaId) {
     global $pdo;
-    $apiKey = get_option('bunny_api_key');
-    $storageZone = get_option('bunny_storage_zone');
-    $region = get_option('bunny_region', 'de');
+    $endpoint = get_option('r2_endpoint');
+    $accessKey = get_option('r2_access_key');
+    $secretKey = get_option('r2_secret_key');
+    $bucketName = get_option('r2_bucket_name');
     
-    if (!$apiKey || !$storageZone) return;
+    if (!$endpoint || !$accessKey || !$secretKey || !$bucketName) return;
     
     $stmt = $pdo->prepare("SELECT file_name FROM media WHERE id = ?");
     $stmt->execute([$mediaId]);
     $fileName = $stmt->fetchColumn();
     
     if ($fileName) {
-        $host = 'storage.bunnycdn.com';
-        if ($region == 'ny') $host = 'ny.storage.bunnycdn.com';
-        else if ($region == 'la') $host = 'la.storage.bunnycdn.com';
-        else if ($region == 'sg') $host = 'sg.storage.bunnycdn.com';
-        else if ($region == 'sy') $host = 'syd.storage.bunnycdn.com';
-        
-        $url = "https://{$host}/{$storageZone}/{$fileName}";
-        
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            "AccessKey: {$apiKey}"
-        ]);
-        curl_exec($ch);
-        curl_close($ch);
+        $s3 = new S3Client($endpoint, $accessKey, $secretKey, $bucketName);
+        $s3->deleteObject($fileName);
     }
 }

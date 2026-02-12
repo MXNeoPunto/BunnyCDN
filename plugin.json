@@ -1,6 +1,6 @@
 {
-    "name": "Bunny CDN Integration",
-    "description": "Sincroniza imágenes con Bunny CDN y optimiza la entrega.",
+    "name": "Cloudflare R2 Integration",
+    "description": "Sincroniza imágenes con Cloudflare R2 y optimiza la entrega.",
     "version": "1.0.0",
     "author": "NeoPunto"
 }
