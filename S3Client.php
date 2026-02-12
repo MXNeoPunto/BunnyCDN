@@ -63,7 +63,16 @@ class S3Client {
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if (curl_errno($ch)) {
+            error_log('S3Client Error: ' . curl_error($ch));
+        }
+
         curl_close($ch);
+
+        if ($httpCode >= 300) {
+            error_log("S3Client HTTP Error ($httpCode): " . $response);
+        }
 
         return ($httpCode >= 200 && $httpCode < 300);
     }

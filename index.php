@@ -19,7 +19,10 @@ function r2_upload_handler($mediaId, $localPath) {
     $bucketName = get_option('r2_bucket_name');
     $customDomain = get_option('r2_custom_domain');
     
-    if (!$endpoint || !$accessKey || !$secretKey || !$bucketName) return;
+    if (!$endpoint || !$accessKey || !$secretKey || !$bucketName) {
+        error_log('R2 Upload Failed: Missing configuration.');
+        return;
+    }
 
     $fileName = basename($localPath);
     $originalPath = $localPath;
